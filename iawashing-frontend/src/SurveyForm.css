@@ -1,0 +1,146 @@
+/* SurveyForm.css */
+.survey-container {
+  padding: 40px 20px;
+  max-width: 900px;
+  margin: 0 auto;
+  font-family: 'Inter', Arial, sans-serif;
+  background-color: #f3f7f8;
+  border-radius: 20px;
+}
+
+.logo-container {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.logo {
+  max-width: 150px;  /* Adjust the size of the logo */
+  margin-bottom: 20px;
+}
+
+.survey-title {
+  color: #0c343d;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.survey-description {
+  color: #134f5c;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.question-container {
+  display: grid;
+  gap: 20px;
+}
+
+.question-card {
+  background: #fff;
+  padding: 20px 24px;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #d9ead3;
+  transition: all 0.3s ease;
+}
+
+.question-card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  transform: translateY(-5px);
+}
+
+.question-text {
+  font-weight: 600;
+  color: #0c343d;
+  margin-bottom: 12px;
+}
+
+.question-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.option-box {
+  background: #f3f7f8;
+  color: #134f5c;
+  padding: 12px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  border: 1px solid #76a5af;
+  transition: all 0.3s ease;
+}
+
+.option-box.selected {
+  background: #76a5af;
+  color: #fff;
+}
+
+.option-box:hover {
+  background: #76a5af;
+  color: #fff;
+}
+
+.submit-button-container {
+  text-align: center;
+  margin-top: 30px;
+}
+
+.submit-button {
+  padding: 12px 28px;
+  border-radius: 12px;
+  background: #134f5c;
+  color: #fff;
+  border: 0;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.submit-button:hover {
+  background: #45818e;
+}
+
+.submit-button.disabled {
+  background: #76a5af;
+  cursor: not-allowed;
+}
+
+.result-card {
+  background: #fff;
+  padding: 24px;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  border: 1px solid #d9ead3;
+  text-align: center;
+}
+
+.result-score {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0c343d;
+}
+
+.result-level {
+  margin-top: 8px;
+  color: #134f5c;
+}
+
+.result-interpretation {
+  margin-top: 12px;
+  color: #45818e;
+}
+
+.reset-button {
+  margin-top: 16px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: #45818e;
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+}
+
+.reset-button:hover {
+  background: #76a5af;
+}
