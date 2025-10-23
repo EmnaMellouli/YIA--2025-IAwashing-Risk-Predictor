@@ -1,15 +1,22 @@
-import { Controller, Post, Body, Param } from '@nestjs/common';
+import { Body, Controller, Param, Post } from '@nestjs/common';
 import { SurveyService } from './survey.service';
+import { CreateSurveyDto, SaveSurveyParamsDto } from './dto/create-survey.dto';
 
 @Controller('survey')
 export class SurveyController {
   constructor(private readonly surveyService: SurveyService) {}
 
   @Post(':sessionId')
-  async submitSurvey(
-    @Param('sessionId') sessionId: string,
-    @Body() answers: Record<string, any>,
+  async create(
+    @Param() params: SaveSurveyParamsDto,
+    @Body() dto: CreateSurveyDto,
   ) {
-    return this.surveyService.saveSurveyAnswers(sessionId, answers);
-  }
+    const saved = await this.surveyService.saveSurveyAnswers(params.sessionId, dto.answers);
+    return {
+      id: saved.id,
+      score: saved.score,
+      level: saved.level,
+      interpretation: this.surveyService.getInterpretation(saved.score),
+    };
+  }
 }

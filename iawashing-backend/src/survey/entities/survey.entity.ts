@@ -1,23 +1,24 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, Index } from 'typeorm';
 
-@Entity()
+@Entity('survey_answers')
 export class SurveyAnswer {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
 
-  @Column()
-  sessionId: string; // Session ID
+  @Index()
+  @Column({ type: 'varchar', length: 120 })
+  sessionId!: string;
 
-  @Column('json')
-  answers: Record<string, any>; // Survey answers in JSON format
+  // Stocke toutes les réponses telles que reçues du front
+  @Column({ type: 'jsonb' })
+  answers!: Record<string, any>;
 
-  @Column('float')
-  score: number; // Use 'float' to store decimal values
+  @Column({ type: 'int' })
+  score!: number; // 0..100 arrondi
 
+  @Column({ type: 'varchar', length: 20 })
+  level!: 'Faible' | 'Moyen' | 'Élevé';
 
-  @Column()
-  level: string; // The level of risk (Low, Medium, High)
-
-  @Column()
-  createdAt: Date; // Timestamp of when the survey was completed
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt!: Date;
 }
