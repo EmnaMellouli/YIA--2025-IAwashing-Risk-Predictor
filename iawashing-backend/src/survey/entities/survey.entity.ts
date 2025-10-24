@@ -9,16 +9,20 @@ export class SurveyAnswer {
   @Column({ type: 'varchar', length: 120 })
   sessionId!: string;
 
-  // Stocke toutes les réponses telles que reçues du front
+  // Store all answers as received from the front end
   @Column({ type: 'jsonb' })
   answers!: Record<string, any>;
 
   @Column({ type: 'int' })
-  score!: number; // 0..100 arrondi
+  score!: number; // 0..100 rounded
 
   @Column({ type: 'varchar', length: 20 })
   level!: 'Faible' | 'Moyen' | 'Élevé';
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
+
+  @Column({ type: 'text', nullable: true })
+interpretation?: string;
+
 }
