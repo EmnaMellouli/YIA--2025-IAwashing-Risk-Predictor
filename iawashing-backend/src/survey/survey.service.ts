@@ -1,39 +1,70 @@
+import { Submission } from '../admin/entities/submission.entity';
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SurveyAnswer } from './entities/survey.entity';
+import { AdminGateway } from '../admin/admin.gateway';
 
 @Injectable()
 export class SurveyService {
   constructor(
+    @InjectRepository(Submission)
+    private readonly subsRepo: Repository<Submission>,    // écrit dans "submissions"
+
+    private readonly adminGateway: AdminGateway,          // push temps réel au dashboard
+
     @InjectRepository(SurveyAnswer)
-    private surveyRepository: Repository<SurveyAnswer>,
+    private readonly surveyRepository: Repository<SurveyAnswer>, // écrit dans "survey_answer"
   ) {}
 
-  // Enregistrer une réponse et calculer score + niveau
-  async saveSurveyAnswers(sessionId: string, answers: Record<string, any>): Promise<SurveyAnswer> {
+  /**
+   * Enregistrer une réponse et calculer score + niveau
+   * @param sessionId UUID de la session (obligatoire)
+   * @param answers   réponses q1..q10
+   * @param job       poste/fonction (optionnel)
+   */
+  async saveSurveyAnswers(sessionId: string, answers: Record<string, any>, job?: string): Promise<SurveyAnswer> {
     try {
       const sanitizedSessionId = (sessionId || '').trim();
       if (!sanitizedSessionId) throw new BadRequestException('sessionId required');
 
       const { score, level } = this.computeScore(answers);
 
+      // 1) Persister dans la table SUBMISSIONS (utilisée par l'admin)
+      const sub = this.subsRepo.create({
+        sessionId: sanitizedSessionId,
+        answers,
+        score,
+        level,
+        respondentJob: job ?? undefined, // ✅ stocker le poste côté submissions (utilisation de undefined au lieu de null)
+      });
+      const savedSub = await this.subsRepo.save(sub);
+
+      // 2) Émettre l’événement WebSocket pour le dashboard admin
+      this.adminGateway.emitSessionUpdate(sanitizedSessionId, {
+        score,
+        level,
+        createdAt: savedSub.createdAt,
+      });
+
+      // 3) Persister aussi dans la table SURVEY_ANSWER (historique)
       const surveyAnswer = this.surveyRepository.create({
         sessionId: sanitizedSessionId,
         answers,
         score,
-        level,                 // 'Faible' | 'Moyen' | 'Élevé'
-        createdAt: new Date(), // si tu as @CreateDateColumn, tu peux enlever cette ligne
+        level,                      // 'Faible' | 'Moyen' | 'Élevé'
+        respondentJob: job ?? undefined, // ✅ stocker le poste côté survey_answer (si la colonne existe)
+        createdAt: new Date(),      // si @CreateDateColumn existe, tu peux enlever
       });
 
-      return await this.surveyRepository.save(surveyAnswer);
+      return await this.surveyRepository.save(surveyAnswer);  // Sauvegarder l'entité dans la base
     } catch (error) {
       console.error('Error in saveSurveyAnswers:', error);
       throw new Error('Error saving survey responses');
     }
   }
 
-  // ⚠️ ICI : on renvoie l'historique ENRICHI avec "interpretation"
+  /** Historique enrichi d'une interprétation textuelle */
   async getSurveyHistory(): Promise<Array<{
     id: string;
     createdAt: Date;
@@ -51,7 +82,7 @@ export class SurveyService {
         createdAt: r.createdAt,
         score: r.score,
         level: r.level as 'Faible' | 'Moyen' | 'Élevé',
-        interpretation: this.getInterpretation(r.score), // ✅ ajouté
+        interpretation: this.getInterpretation(r.score),
       }));
     } catch (error) {
       console.error('Error in getSurveyHistory:', error);
@@ -97,7 +128,7 @@ export class SurveyService {
     return { score, level };
   }
 
-  // Texte d’interprétation
+  // Texte d’interprétation (cohérent UI/admin)
   getInterpretation(score: number): string {
     if (score < 40) {
       return 'Votre gouvernance IA semble robuste et alignée sur vos usages.';

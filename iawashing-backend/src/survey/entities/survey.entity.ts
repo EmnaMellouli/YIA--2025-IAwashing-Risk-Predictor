@@ -23,6 +23,9 @@ export class SurveyAnswer {
   createdAt!: Date;
 
   @Column({ type: 'text', nullable: true })
-interpretation?: string;
+  interpretation?: string;
 
+  // Ajout de la colonne respondentJob
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  respondentJob?: string;
 }

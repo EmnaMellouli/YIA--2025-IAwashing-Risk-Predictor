@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import axios from "axios";
-import logo from "./logo.png"; // Ensure the correct path to your logo
-import "./SurveyForm.css"; // Ensure you use the updated CSS
+import logo from "./logo.png";
+import "./SurveyForm.css";
 
 const QUESTIONS = [
   { id: "q1", texte: "Votre organisation dispose-t-elle d’une stratégie IA validée et documentée ?", options: ["Oui", "Non", "En cours"] },
@@ -18,54 +18,115 @@ const QUESTIONS = [
 
 export default function SurveyFormFR() {
   const [answers, setAnswers] = useState({});
+  const [job, setJob] = useState("");                // ✅ nouveau champ poste/fonction
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:3000";
 
-  const handleChange = (qid, val) => setAnswers((prev) => ({ ...prev, [qid]: val }));
+  // sessionId via URL ?sessionId=UUID
+  const sessionId = useMemo(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get("sessionId") || "";
+  }, []);
+
+  const handleChange = (qid, val) => {
+    setAnswers((prev) => ({ ...prev, [qid]: val }));
+  };
+
+  const allAnswered = useMemo(
+    () => QUESTIONS.every((q) => answers[q.id]),
+    [answers]
+  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMsg("");
+
+    if (!sessionId) {
+      setErrorMsg("Lien invalide : aucun sessionId dans l’URL.");
+      return;
+    }
+    if (!allAnswered) {
+      setErrorMsg("Merci de répondre à toutes les questions.");
+      return;
+    }
+
     setLoading(true);
     try {
-      const sessionId = "12345";
-      const res = await axios.post(`${API_BASE}/survey/${sessionId}`, { answers });
+      // ✅ envoi du job en plus des answers
+      const res = await axios.post(`${API_BASE}/survey/${sessionId}`, { answers, job });
       setResult(res.data);
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de l’envoi du sondage.");
+      const apiMsg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Erreur lors de l’envoi du sondage.";
+      setErrorMsg(apiMsg);
+      alert(apiMsg);
     } finally {
       setLoading(false);
     }
   };
-
-  const allAnswered = QUESTIONS.every((q) => answers[q.id]);
 
   return (
     <div className="survey-container">
       <div className="logo-container">
         <img src={logo} alt="Yonnov'IA Logo" className="logo" />
       </div>
+
       <h1 className="survey-title">Sondage IAwashing</h1>
-      <p className="survey-description">Répondez aux 10 questions ci-dessous pour évaluer la maturité IA de votre organisation.</p>
+      <p className="survey-description">
+        Répondez aux 10 questions ci-dessous pour évaluer la maturité IA de votre organisation.
+      </p>
+
+      {!sessionId && (
+        <p className="warning">
+          <b>Attention :</b> aucun <code>sessionId</code> détecté. Le bouton “Envoyer” sera désactivé.
+        </p>
+      )}
+
+      {errorMsg && (
+        <p className="error-text" role="alert" style={{ marginTop: 8 }}>
+          {errorMsg}
+        </p>
+      )}
 
       {!result ? (
         <form onSubmit={handleSubmit}>
+          {/* ✅ Champ “Poste / Fonction” (optionnel) */}
+          <div className="question-card" style={{ marginBottom: 16 }}>
+            <div className="question-text">Votre poste / fonction (optionnel)</div>
+            <input
+              type="text"
+              placeholder="Ex. : Responsable SI, Data Analyst, RH, Direction…"
+              value={job}
+              onChange={(e) => setJob(e.target.value)}
+              className="text-input"
+            />
+          </div>
+
           <div className="question-container">
             {QUESTIONS.map((q) => (
               <div key={q.id} className="question-card">
                 <div className="question-text">{q.texte}</div>
                 <div className="question-options">
-                  {q.options.map((opt) => (
-                    <div
-                      key={opt}
-                      className={`option-box ${answers[q.id] === opt ? "selected" : ""}`}
-                      onClick={() => handleChange(q.id, opt)}
-                    >
-                      {opt}
-                    </div>
-                  ))}
+                  {q.options.map((opt) => {
+                    const isSelected = answers[q.id] === opt;
+                    return (
+                      <button
+                        type="button"
+                        key={opt}
+                        className={`option-box ${isSelected ? "selected" : ""}`}
+                        onClick={() => handleChange(q.id, opt)}
+                        aria-pressed={isSelected}
+                      >
+                        {opt}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -74,8 +135,8 @@ export default function SurveyFormFR() {
           <div className="submit-button-container">
             <button
               type="submit"
-              disabled={!allAnswered || loading}
-              className={`submit-button ${!allAnswered || loading ? "disabled" : ""}`}
+              disabled={!allAnswered || !sessionId || loading}
+              className={`submit-button ${(!allAnswered || !sessionId || loading) ? "disabled" : ""}`}
             >
               {loading ? "Envoi..." : "Envoyer"}
             </button>
@@ -84,13 +145,17 @@ export default function SurveyFormFR() {
       ) : (
         <div className="result-card">
           <div className="result-score">Score : {result.score}/100</div>
-          <div className="result-level"><b>Niveau :</b> {result.level}</div>
+          <div className="result-level">
+            <b>Niveau :</b> {result.level}
+          </div>
           <p className="result-interpretation">{result.interpretation}</p>
 
           <button
             onClick={() => {
               setResult(null);
               setAnswers({});
+              setJob("");
+              setErrorMsg("");
             }}
             className="reset-button"
           >

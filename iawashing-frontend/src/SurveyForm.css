@@ -144,3 +144,15 @@
 .reset-button:hover {
   background: #76a5af;
 }
+.text-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cfe3e8;
+  border-radius: 10px;
+  background: #f3f7f8;
+  font-size: 14px;
+  outline: none;
+}
+.text-input:focus {
+  border-color: #76a5af;
+}

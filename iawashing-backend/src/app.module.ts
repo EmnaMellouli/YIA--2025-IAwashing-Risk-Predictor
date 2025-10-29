@@ -6,7 +6,7 @@ import { SurveyModule } from './survey/survey.module';
 import { SurveyAnswer } from './survey/entities/survey.entity';
 import { SurveyController } from './survey/survey.controller';
 import { SurveyService } from './survey/survey.service';
-
+import { AdminModule } from './admin/admin.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
@@ -20,6 +20,7 @@ import { SurveyService } from './survey/survey.service';
       synchronize: true,
     }),
     TypeOrmModule.forFeature([SurveyAnswer]), // Add this line to register the SurveyAnswer entity
+    AdminModule,
   ],
   controllers: [AppController, SurveyController], // Register SurveyController here
   providers: [AppService, SurveyService],       // Register SurveyService here
