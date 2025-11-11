@@ -4,6 +4,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SurveyAnswer } from './entities/survey.entity';
 import { AdminGateway } from '../admin/admin.gateway';
+import * as fs from 'fs';
+import * as path from 'path';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class SurveyService {
@@ -136,5 +139,65 @@ export class SurveyService {
       return 'Votre démarche IA est prometteuse mais manque de concrétisation ou de transparence.';
     }
     return 'Votre organisation semble communiquer davantage qu’elle ne déploie — attention au risque d’IAwashing.';
+  }
+  async saveFeedback(sessionId: string, payload: {
+    score?: number;
+    rating?: number;
+    comment?: string;
+    job?: string;
+    answers?: Record<string, any>;
+  }) {
+    const csvPath = this.getFeedbacksCsvPath();
+    // Construire la ligne CSV en échappant les guillemets
+    const record = {
+      id: randomUUID(),
+      sessionId: (sessionId || '').trim(),
+      score: payload.score ?? '',
+      rating: payload.rating ?? '',
+      comment: payload.comment ? String(payload.comment).replace(/"/g, '""').replace(/\r?\n/g, ' ') : '',
+      job: payload.job ? String(payload.job).replace(/"/g, '""') : '',
+      answers: payload.answers ? JSON.stringify(payload.answers).replace(/"/g, '""') : '',
+      createdAt: new Date().toISOString(),
+    };
+
+    const header = ['id','sessionId','score','rating','comment','job','answers','createdAt'].join(',') + '\n';
+    const line = [
+      `"${record.id}"`,
+      `"${record.sessionId}"`,
+      `"${record.score}"`,
+      `"${record.rating}"`,
+      `"${record.comment}"`,
+      `"${record.job}"`,
+      `"${record.answers}"`,
+      `"${record.createdAt}"`,
+    ].join(',') + '\n';
+
+    // Si le dossier racine n'est pas accessible en écriture sur certains hébergements,
+    // tu peux changer getFeedbacksCsvPath() pour pointer vers /var/data/... ou autre.
+    await new Promise<void>((resolve, reject) => {
+      const exists = fs.existsSync(csvPath);
+      if (!exists) {
+        fs.writeFile(csvPath, header + line, { encoding: 'utf8' }, (err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      } else {
+        fs.appendFile(csvPath, line, { encoding: 'utf8' }, (err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      }
+    });
+
+    // Optionnel : logger
+    try { this.adminGateway?.emitSessionUpdate(record.sessionId, { feedbackReceivedAt: record.createdAt }); } catch(e){/* noop */ }
+
+    return record;
+  }
+
+  /** Retourne le path complet du CSV (modifiable si besoin) */
+  getFeedbacksCsvPath(): string {
+    // fichier créé dans le répertoire courant du process (la racine du projet côté backend)
+    return path.resolve(process.cwd(), 'admin_feedbacks.csv');
   }
 }

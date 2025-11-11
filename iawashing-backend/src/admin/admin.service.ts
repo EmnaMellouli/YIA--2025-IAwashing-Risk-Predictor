@@ -1,3 +1,4 @@
+// src/admin/admin.service.ts
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -13,33 +14,29 @@ export class AdminService {
     @InjectRepository(Submission) private readonly subRepo: Repository<Submission>,
   ) {}
 
-  /** Utilitaire: interprétation toujours présente (string) */
+  /** Texte interprétatif */
   private getInterpretationText(score?: number, fallback?: string): string {
     if (fallback && typeof fallback === 'string' && fallback.trim().length > 0) {
       return fallback;
     }
     const s = typeof score === 'number' ? score : 0;
-    if (s < 40) {
-      return 'Votre gouvernance IA semble robuste et alignée sur vos usages.';
-    } else if (s < 70) {
-      return 'Votre démarche IA est prometteuse mais manque de concrétisation ou de transparence.';
-    }
+    if (s < 40) return 'Votre gouvernance IA semble robuste et alignée sur vos usages.';
+    if (s < 70) return 'Votre démarche IA est prometteuse mais manque de concrétisation ou de transparence.';
     return 'Votre organisation semble communiquer davantage qu’elle ne déploie — attention au risque d’IAwashing.';
   }
 
-  /** Utilitaire: échappement CSV */
+  /** Échappement CSV */
   private csvEscape(v: any): string {
     const s = (v ?? '').toString();
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   }
 
-  /** Liste des sessions (avec stats simples) */
+  /** Liste des sessions */
   async listSessions() {
     const sessions = await this.sessionRepo.find({ order: { createdAt: 'DESC' } });
     const withStats = await Promise.all(
       sessions.map(async (s) => {
         const submissionsCount = await this.subRepo.count({ where: { session: { id: s.id } } });
-        // On garde submissionsCount (utile pour le total affiché), on ne renvoie plus la progression si tu ne la veux pas au front
         return { ...s, submissionsCount };
       }),
     );
@@ -58,7 +55,7 @@ export class AdminService {
     return this.sessionRepo.save(s);
   }
 
-  /** Liste paginée des soumissions d'une session */
+  /** Liste paginée */
   async listSubmissions(args: { page?: number; pageSize?: number; sessionId?: string }) {
     const page = Math.max(1, args.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, args.pageSize ?? 20));
@@ -71,7 +68,6 @@ export class AdminService {
       skip: (page - 1) * pageSize,
     });
 
-    // Ajoute une interprétation sûre (string) pour la réponse API
     const withInterp: SubmissionWithInterp[] = items.map((s) => {
       const interpretation = this.getInterpretationText(s.score, (s as any).interpretation);
       return { ...(s as any), interpretation };
@@ -80,40 +76,11 @@ export class AdminService {
     return { items: withInterp, total, page, pageSize };
   }
 
-  /** Export CSV (scores + niveau + interprétation + job) */
-  async exportSessionCsv(sessionId: string) {
-    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
-    if (!session) throw new NotFoundException('Session not found');
-
-    const subs = await this.subRepo.find({
-      where: { session: { id: sessionId } },
-      order: { createdAt: 'ASC' },
-    });
-
-    const headers = ['Date', 'Score', 'Niveau', 'Interprétation', 'Job'];
-
-    const rows = subs.map((s) => {
-      const interpText = this.getInterpretationText(s.score, (s as any).interpretation);
-      return [
-        s.createdAt?.toISOString?.() ?? '',
-        (s.score ?? '').toString(),
-        s.level ?? '',
-        interpText,
-        s.respondentJob ?? '',
-      ];
-    });
-
-    const csv = [
-      headers.join(','),
-      ...rows.map((r) => r.map((v) => this.csvEscape(v)).join(',')),
-    ].join('\n');
-
-    const filename = `scores_${sessionId}.csv`;
-    return { filename, csv };
-  }
-
-  /** Export CSV détaillé avec réponses q1..q10 + job */
-  async exportAnswersCsv(sessionId: string) {
+  /**
+   * Génère le CSV combiné (scores + q1..q10 + feedback rating/comment)
+   * Retourne { filename, csv } — ne force pas l'écriture sur disque ici.
+   */
+  async exportFeedbackCsv(sessionId: string) {
     const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
     if (!session) throw new NotFoundException('Session not found');
 
@@ -123,12 +90,9 @@ export class AdminService {
     });
 
     const headers = [
-      'Date',
-      'Score',
-      'Niveau',
-      'Interprétation',
-      'Job',
+      'Date', 'Score', 'Niveau', 'Interprétation', 'Job',
       'q1','q2','q3','q4','q5','q6','q7','q8','q9','q10',
+      'Rating', 'Commentaire',
     ];
 
     const getAnswer = (answers: any, key: string) =>
@@ -138,12 +102,13 @@ export class AdminService {
       '';
 
     const rows = subs.map((s) => {
-      const interpText = this.getInterpretationText(s.score, (s as any).interpretation);
+      const interp = this.getInterpretationText(s.score, (s as any).interpretation);
+      const feedback = (s as any).feedback ?? (s as any).userFeedback ?? {};
       return {
         Date: s.createdAt?.toISOString?.() ?? '',
         Score: s.score ?? '',
         Niveau: s.level ?? '',
-        Interprétation: interpText,
+        Interprétation: interp,
         Job: s.respondentJob ?? '',
         q1: getAnswer(s.answers, 'q1'),
         q2: getAnswer(s.answers, 'q2'),
@@ -155,21 +120,18 @@ export class AdminService {
         q8: getAnswer(s.answers, 'q8'),
         q9: getAnswer(s.answers, 'q9'),
         q10: getAnswer(s.answers, 'q10'),
+        Rating: feedback?.rating ?? (s as any).rating ?? '',
+        Commentaire: feedback?.comment ?? (s as any).comment ?? '',
       };
     });
 
-    const lines = [
+    const csv = [
       headers.join(','),
       ...rows.map((r) => headers.map((h) => this.csvEscape((r as any)[h])).join(',')),
-    ];
-    const csv = lines.join('\n');
-    const filename = `reponses_${sessionId}.csv`;
+    ].join('\n');
 
+    const filename = `feedbacks_${sessionId}.csv`;
     return { filename, csv };
   }
 
-  /** Interprétation par score (publique si besoin ailleurs) */
-  getInterpretation(score: number): string {
-    return this.getInterpretationText(score);
-  }
 }

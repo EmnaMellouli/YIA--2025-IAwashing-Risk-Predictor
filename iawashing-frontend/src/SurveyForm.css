@@ -233,3 +233,34 @@
 .reset-button:hover {
   background: #76a5af;
 }
+/* Feedback card specifics */
+.feedback-card {
+  border: 1px solid #d9ead3;
+}
+
+/* Small tweak to ensure option-box looks consistent when used for rating */
+.feedback-card .option-box {
+  min-width: 44px;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+/* Ensure textarea looks consistent */
+.feedback-card textarea {
+  font-family: inherit;
+}
+
+/* result-and-feedback layout on small screens */
+@media (min-width: 900px) {
+  .result-and-feedback {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  .result-card {
+    margin: 0;
+  }
+}

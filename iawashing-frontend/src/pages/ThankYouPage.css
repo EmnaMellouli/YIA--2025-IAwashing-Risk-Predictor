@@ -1,0 +1,32 @@
+.ty-container {
+  min-height: 100vh;
+  background: #f5f9fa;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+  color: #134f5c;
+  font-family: 'Poppins', sans-serif;
+}
+
+.ty-logo {
+  width: 120px;
+  margin-bottom: 20px;
+}
+
+.ty-btn {
+  margin-top: 30px;
+  background-color: #134f5c;
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.ty-btn:hover {
+  background-color: #0d3945;
+}

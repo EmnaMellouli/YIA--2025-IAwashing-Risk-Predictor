@@ -7,48 +7,52 @@ import {
 } from 'recharts';
 
 import './AdminDashboard.css';
-import logo from '../logo.png'; // adapte le chemin si besoin
+import logo from '../logo.png';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+const REFRESH_INTERVAL = 30000; // ✅ auto-refresh toutes les 30 secondes
 
 export default function AdminDashboard() {
   const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState('');
   const [subs, setSubs] = useState({ items: [], total: 0, page: 1, pageSize: 20 });
   const [loading, setLoading] = useState(false);
+  const [autoRefreshActive, setAutoRefreshActive] = useState(true);
 
-  // Charger les sessions
+  // Charger la liste des sessions
   const loadSessions = async () => {
-    const res = await axios.get(`${API}/admin/sessions`);
-    setSessions(res.data || []);
-    if (!activeSession && res.data?.length) setActiveSession(res.data[0].id);
+    try {
+      const res = await axios.get(`${API}/admin/sessions`);
+      setSessions(res.data || []);
+      if (!activeSession && res.data?.length) setActiveSession(res.data[0].id);
+    } catch (err) {
+      console.error('Erreur lors du chargement des sessions', err);
+    }
   };
 
-  // Charger les soumissions (paginées) + total
+  // Charger les soumissions
   const loadSubmissions = async (page = 1) => {
     if (!activeSession) return;
     setLoading(true);
     try {
       const res = await axios.get(
-        `${API}/admin/submissions?sessionId=${activeSession}&page=${page}&pageSize=20`,
+        `${API}/admin/submissions?sessionId=${activeSession}&page=${page}&pageSize=20`
       );
       setSubs(res.data);
-    } finally { setLoading(false); }
+    } catch (err) {
+      console.error('Erreur lors du chargement des soumissions', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Export CSV (scores)
-  const exportCsv = () => {
+  // ✅ Export CSV Feedback unique
+  const exportFeedbackCsv = () => {
     if (!activeSession) return;
-    window.open(`${API}/admin/sessions/${activeSession}/export`, '_blank');
+    window.open(`${API}/admin/sessions/${activeSession}/export-feedback`, '_blank');
   };
 
-  // Export CSV (réponses détaillées)
-  const exportAnswersCsv = () => {
-    if (!activeSession) return;
-    window.open(`${API}/admin/sessions/${activeSession}/export-answers`, '_blank');
-  };
-
-  // Comptages et radar % (sur le total global de la session)
+  // Radar data
   const { radarData, cntFaible, cntMoyen, cntEleve, totalCount } = useMemo(() => {
     const counts = { Faible: 0, Moyen: 0, Élevé: 0 };
     for (const it of subs.items) counts[it.level] = (counts[it.level] || 0) + 1;
@@ -58,9 +62,10 @@ export default function AdminDashboard() {
 
     const data = [
       { metric: 'Faible', value: Math.round((counts.Faible / denom) * 100) },
-      { metric: 'Moyen',  value: Math.round((counts.Moyen  / denom) * 100) },
-      { metric: 'Élevé',  value: Math.round((counts.Élevé  / denom) * 100) },
+      { metric: 'Moyen', value: Math.round((counts.Moyen / denom) * 100) },
+      { metric: 'Élevé', value: Math.round((counts.Élevé / denom) * 100) },
     ];
+
     return {
       radarData: data,
       cntFaible: counts.Faible,
@@ -70,18 +75,41 @@ export default function AdminDashboard() {
     };
   }, [subs.items, subs.total]);
 
-  useEffect(() => { loadSessions(); }, []);
+  // 🔁 Initialisation
   useEffect(() => {
-    loadSubmissions(1);
+    loadSessions();
+  }, []);
+
+  // 🔌 WebSocket temps réel
+  useEffect(() => {
     if (!activeSession) return;
+
+    loadSubmissions(1);
     const socket = io(API, { query: { sessionId: activeSession } });
-    socket.on('session:update', () => loadSubmissions(1));
+
+    socket.on('session:update', () => {
+      console.log('🧠 Nouvelle mise à jour détectée via socket');
+      loadSubmissions(1);
+    });
+
     return () => socket.disconnect();
   }, [activeSession]);
 
+  // ⏰ Auto-refresh toutes les 30 secondes
+  useEffect(() => {
+    if (!autoRefreshActive || !activeSession) return;
+
+    const interval = setInterval(() => {
+      console.log('🔄 Auto-refresh exécuté');
+      loadSubmissions(1);
+    }, REFRESH_INTERVAL);
+
+    return () => clearInterval(interval); // nettoyage
+  }, [activeSession, autoRefreshActive]);
+
   return (
     <div className="ad-root">
-      {/* Header clair avec logo */}
+      {/* Header */}
       <header className="ad-header">
         <div className="ad-brand">
           <img src={logo} alt="Yonnov'IA" className="ad-logo" />
@@ -106,21 +134,30 @@ export default function AdminDashboard() {
         <select
           className="ad-select"
           value={activeSession}
-          onChange={e => setActiveSession(e.target.value)}
+          onChange={(e) => setActiveSession(e.target.value)}
         >
-          {sessions.map(s => (
+          {sessions.map((s) => (
             <option key={s.id} value={s.id}>{s.title}</option>
           ))}
         </select>
 
         <button className="ad-btn" onClick={() => loadSubmissions(subs.page)}>Rafraîchir</button>
-        <button className="ad-btn ghost" onClick={exportCsv}>Exporter CSV (scores)</button>
-        <button className="ad-btn ghost" onClick={exportAnswersCsv}>Exporter Réponses CSV</button>
+        <button className="ad-btn ghost" onClick={exportFeedbackCsv}>
+          Exporter CSV Feedbacks
+        </button>
+
+        {/* ✅ Bouton pour activer/désactiver l’auto-refresh */}
+        <button
+          className="ad-btn ghost"
+          onClick={() => setAutoRefreshActive((v) => !v)}
+        >
+          {autoRefreshActive ? '⏸️ Stop auto-refresh' : '▶️ Activer auto-refresh'}
+        </button>
       </div>
 
       {/* Contenu principal */}
       <div className="ad-grid">
-        {/* Soumissions */}
+        {/* Tableau des soumissions */}
         <section className="ad-card">
           <h3>Soumissions</h3>
           {loading ? (
@@ -132,12 +169,12 @@ export default function AdminDashboard() {
                   <th>Date</th>
                   <th>Score</th>
                   <th>Niveau</th>
-                  <th>Job</th> {/* ✅ nouvelle colonne */}
+                  <th>Job</th>
                   <th>Interprétation</th>
                 </tr>
               </thead>
               <tbody>
-                {subs.items.map(it => (
+                {subs.items.map((it) => (
                   <tr key={it.id}>
                     <td>{new Date(it.createdAt).toLocaleString()}</td>
                     <td>{it.score}</td>
@@ -169,10 +206,9 @@ export default function AdminDashboard() {
           </div>
         </section>
 
-        {/* Radar + résumé avec TOTAL */}
+        {/* Radar + résumé */}
         <aside className="ad-card">
           <h3>Répartition (Radar)</h3>
-
           <div style={{ width: '100%', height: 320 }}>
             <ResponsiveContainer>
               <RadarChart data={radarData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
@@ -191,7 +227,6 @@ export default function AdminDashboard() {
             </ResponsiveContainer>
           </div>
 
-          {/* Résumé à droite du radar */}
           <div className="ad-radar">
             <div className="radar-row radar-total">
               <span>Total réponses</span>

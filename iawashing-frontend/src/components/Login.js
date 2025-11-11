@@ -13,7 +13,7 @@ const Login = ({ onLogin }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     // Vérification du mot de passe "yonn"
-    if (password === 'yonn') {  
+    if (password === 'Yonnov@2025') {  
       onLogin(true);  // Authentifie l'admin si le mot de passe est correct
       setError('');
       navigate('/admin');  // Redirige vers le tableau de bord admin

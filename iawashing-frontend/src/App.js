@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import SurveyFormFR from './SurveyForm';
 import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
+import ThankYouPage from './pages/ThankYouPage'; // ✅ ajout de la page de remerciement
 
 function ProtectedRoute({ isAuthenticated, children }) {
   if (!isAuthenticated) {
@@ -28,6 +29,9 @@ function App() {
 
           {/* Formulaire (path) : /session/:sessionId */}
           <Route path="/session/:sessionId" element={<SurveyFormFR />} />
+
+          {/* ✅ Nouvelle page de remerciement */}
+          <Route path="/thank-you" element={<ThankYouPage />} />
 
           {/* Login admin */}
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
