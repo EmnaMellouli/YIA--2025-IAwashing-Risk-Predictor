@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
 import {
@@ -10,7 +10,8 @@ import './AdminDashboard.css';
 import logo from '../logo.png';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000';
-const REFRESH_INTERVAL = 30000; // ✅ auto-refresh toutes les 30 secondes
+const SITE = process.env.REACT_APP_SITE_URL || 'https://ai-washing.yonnovia-213.com';
+const REFRESH_INTERVAL = 30000; // auto-refresh toutes les 30 secondes
 
 export default function AdminDashboard() {
   const [sessions, setSessions] = useState([]);
@@ -20,42 +21,54 @@ export default function AdminDashboard() {
   const [autoRefreshActive, setAutoRefreshActive] = useState(true);
 
   // Charger la liste des sessions
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/admin/sessions`);
-      setSessions(res.data || []);
-      if (!activeSession && res.data?.length) setActiveSession(res.data[0].id);
+      const data = res.data || [];
+      setSessions(data);
+      // si aucune activeSession, prendre la première
+      if (!activeSession && data.length) setActiveSession(data[0].id);
     } catch (err) {
       console.error('Erreur lors du chargement des sessions', err);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSession]);
 
-  // Charger les soumissions
-  const loadSubmissions = async (page = 1) => {
+  // Charger les soumissions (page optionnelle)
+  const loadSubmissions = useCallback(async (page = 1) => {
     if (!activeSession) return;
     setLoading(true);
     try {
       const res = await axios.get(
         `${API}/admin/submissions?sessionId=${activeSession}&page=${page}&pageSize=20`
       );
-      setSubs(res.data);
+      // s'assurer d'avoir un objet cohérent
+      setSubs({
+        items: res.data.items || [],
+        total: res.data.total || 0,
+        page: res.data.page || page,
+        pageSize: res.data.pageSize || 20,
+      });
     } catch (err) {
       console.error('Erreur lors du chargement des soumissions', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeSession]);
 
-  // ✅ Export CSV Feedback unique
-  const exportFeedbackCsv = () => {
+  // Export CSV Feedback unique
+  const exportFeedbackCsv = useCallback(() => {
     if (!activeSession) return;
     window.open(`${API}/admin/sessions/${activeSession}/export-feedback`, '_blank');
-  };
+  }, [activeSession]);
 
   // Radar data
   const { radarData, cntFaible, cntMoyen, cntEleve, totalCount } = useMemo(() => {
     const counts = { Faible: 0, Moyen: 0, Élevé: 0 };
-    for (const it of subs.items) counts[it.level] = (counts[it.level] || 0) + 1;
+    for (const it of subs.items) {
+      const lvl = it.level || 'Faible';
+      counts[lvl] = (counts[lvl] || 0) + 1;
+    }
 
     const total = subs.total || 0;
     const denom = total > 0 ? total : 1;
@@ -75,27 +88,44 @@ export default function AdminDashboard() {
     };
   }, [subs.items, subs.total]);
 
-  // 🔁 Initialisation
+  // Initialisation
   useEffect(() => {
     loadSessions();
-  }, []);
+  }, [loadSessions]);
 
-  // 🔌 WebSocket temps réel
+  // WebSocket temps réel — écoute les mises à jour pour la session active
   useEffect(() => {
     if (!activeSession) return;
 
+    // charger d'abord
     loadSubmissions(1);
+
     const socket = io(API, { query: { sessionId: activeSession } });
 
-    socket.on('session:update', () => {
+    const onUpdate = () => {
       console.log('🧠 Nouvelle mise à jour détectée via socket');
       loadSubmissions(1);
+    };
+
+    socket.on('connect', () => {
+      console.log('Socket connecté', socket.id);
     });
 
-    return () => socket.disconnect();
-  }, [activeSession]);
+    socket.on('session:update', onUpdate);
+    socket.on('submission:created', onUpdate);
+    socket.on('disconnect', (reason) => {
+      console.log('Socket déconnecté', reason);
+    });
 
-  // ⏰ Auto-refresh toutes les 30 secondes
+    return () => {
+      // nettoyage propre : enlever listeners puis déconnecter
+      socket.off('session:update', onUpdate);
+      socket.off('submission:created', onUpdate);
+      try { socket.disconnect(); } catch (e) { /* ignore */ }
+    };
+  }, [activeSession, loadSubmissions]);
+
+  // Auto-refresh toutes les 30s
   useEffect(() => {
     if (!autoRefreshActive || !activeSession) return;
 
@@ -104,8 +134,8 @@ export default function AdminDashboard() {
       loadSubmissions(1);
     }, REFRESH_INTERVAL);
 
-    return () => clearInterval(interval); // nettoyage
-  }, [activeSession, autoRefreshActive]);
+    return () => clearInterval(interval);
+  }, [activeSession, autoRefreshActive, loadSubmissions]);
 
   return (
     <div className="ad-root">
@@ -119,7 +149,7 @@ export default function AdminDashboard() {
           {activeSession && (
             <a
               className="ad-btn ghost"
-              href={`http://localhost:3001/survey?sessionId=${activeSession}`}
+              href={`${SITE}/survey?sessionId=${activeSession}`}
               target="_blank"
               rel="noreferrer"
             >
@@ -136,6 +166,7 @@ export default function AdminDashboard() {
           value={activeSession}
           onChange={(e) => setActiveSession(e.target.value)}
         >
+          <option value="">-- Choisir une session --</option>
           {sessions.map((s) => (
             <option key={s.id} value={s.id}>{s.title}</option>
           ))}
@@ -146,7 +177,6 @@ export default function AdminDashboard() {
           Exporter CSV Feedbacks
         </button>
 
-        {/* ✅ Bouton pour activer/désactiver l’auto-refresh */}
         <button
           className="ad-btn ghost"
           onClick={() => setAutoRefreshActive((v) => !v)}
@@ -178,7 +208,7 @@ export default function AdminDashboard() {
                   <tr key={it.id}>
                     <td>{new Date(it.createdAt).toLocaleString()}</td>
                     <td>{it.score}</td>
-                    <td><span className={`badge badge-${it.level}`}>{it.level}</span></td>
+                    <td><span className={`badge badge-${(it.level || 'Faible').toLowerCase()}`}>{it.level || 'Faible'}</span></td>
                     <td>{it.respondentJob || '-'}</td>
                     <td style={{ maxWidth: 460 }}>{it.interpretation}</td>
                   </tr>
@@ -191,7 +221,7 @@ export default function AdminDashboard() {
             <button
               className="ad-btn ghost"
               disabled={subs.page <= 1}
-              onClick={() => loadSubmissions(subs.page - 1)}
+              onClick={() => loadSubmissions(Math.max(1, subs.page - 1))}
             >
               Précédent
             </button>
@@ -212,16 +242,13 @@ export default function AdminDashboard() {
           <div style={{ width: '100%', height: 320 }}>
             <ResponsiveContainer>
               <RadarChart data={radarData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                <PolarGrid stroke="#cfe3e8" />
-                <PolarAngleAxis dataKey="metric" tick={{ fill: '#134f5c', fontSize: 12 }} />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#134f5c', fontSize: 10 }} />
+                <PolarGrid />
+                <PolarAngleAxis dataKey="metric" />
+                <PolarRadiusAxis angle={30} domain={[0, 100]} />
                 <Tooltip />
                 <Radar
                   name="% de soumissions"
                   dataKey="value"
-                  stroke="#134f5c"
-                  fill="#76a5af"
-                  fillOpacity={0.55}
                 />
               </RadarChart>
             </ResponsiveContainer>
